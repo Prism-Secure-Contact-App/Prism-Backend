@@ -1,0 +1,16 @@
+# Credentials & secrets
+.env
+*.env
+*.pem
+*.key
+
+# Runtime data (production'da oluşur)
+data/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store

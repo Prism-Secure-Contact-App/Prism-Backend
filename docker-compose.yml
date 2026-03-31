@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: prism-db
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-synapse}
+      - POSTGRES_USER=${POSTGRES_USER:-synapse}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    container_name: prism-synapse
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./data/synapse:/data
+    environment:
+      - SYNAPSE_CONFIG_PATH=/data/homeserver.yaml
+
+  whatsapp:
+    image: dock.mau.dev/mautrix/whatsapp:latest
+    container_name: prism-whatsapp
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data/whatsapp:/data
+
+  meta:
+    image: dock.mau.dev/mautrix/meta:latest
+    container_name: prism-meta
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data/meta:/data
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: prism-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
