@@ -10,7 +10,7 @@ echo -e "${GREEN}🚀 WhatsApp Köprüsü Kurulumu Başlıyor...${NC}"
 # 1. Database Oluşturma
 echo -e "${YELLOW}🗄️  Adım 1: WhatsApp için Postgres Veritabanı Açılıyor...${NC}"
 # Postgres konteynerında veritabanını oluşturan SQL
-docker exec -i matrix-db psql -U synapse -d synapse -c 'CREATE DATABASE whatsapp;' 2>/dev/null
+docker exec -i prism-db psql -U synapse -d synapse -c 'CREATE DATABASE whatsapp;' 2>/dev/null
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✅ whatsapp veritabanı başarıyla oluşturuldu (veya zaten var).${NC}"
@@ -41,7 +41,11 @@ fi
 
 echo -e "${YELLOW}⚙️  Adım 4: Registration Dosyası Üretiliyor...${NC}"
 # registration.yaml dosyası üretelim (Synapse'e tanıtmak için)
-docker compose run --rm whatsapp -g
+docker run --rm --security-opt seccomp=unconfined --platform linux/arm64 \
+    -v $(pwd)/data/whatsapp:/data \
+    --entrypoint /usr/bin/mautrix-whatsapp \
+    dock.mau.dev/mautrix/whatsapp:latest \
+    -c /data/config.yaml -r /data/registration.yaml -g
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}🛑 HATA: registration.yaml üretilemedi!${NC}"
@@ -49,10 +53,13 @@ if [ $? -ne 0 ]; then
 fi
 
 # Dosyayı Synapse klasörüne kopyalayalım ki Synapse ulaşabilsin
-cp data/whatsapp/registration.yaml data/synapse/appservice-whatsapp.yaml
+sudo cp data/whatsapp/registration.yaml data/synapse/whatsapp-registration.yaml
 
 # Python scriptini tekrar çağırıp homeserver'a tam yolu ekleyelim
-sed -i 's/- \/data\/registration.yaml/- \/data\/appservice-whatsapp.yaml/g' data/synapse/homeserver.yaml
+sudo sed -i '/^-e[[:space:]]*$/d' data/synapse/homeserver.yaml
+if ! grep -q '/data/whatsapp-registration.yaml' data/synapse/homeserver.yaml; then
+    sudo sh -c 'printf "\napp_service_config_files:\n  - /data/whatsapp-registration.yaml\n" >> data/synapse/homeserver.yaml'
+fi
 
 echo -e "${GREEN}✅ Tüm Dosyalar Başarıyla Konfigüre Edildi!${NC}"
 echo -e "\n--- ÇALIŞTIRMA VE QR KOD ---"

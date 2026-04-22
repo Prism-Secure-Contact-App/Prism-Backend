@@ -18,6 +18,9 @@ services:
 
   synapse:
     image: matrixdotorg/synapse:latest
+    platform: linux/arm64
+    security_opt:
+      - seccomp:unconfined
     container_name: prism-synapse
     restart: unless-stopped
     depends_on:
@@ -32,6 +35,9 @@ services:
 
   whatsapp:
     image: dock.mau.dev/mautrix/whatsapp:latest
+    platform: linux/arm64
+    security_opt:
+      - seccomp:unconfined
     container_name: prism-whatsapp
     restart: unless-stopped
     depends_on:
@@ -42,6 +48,10 @@ services:
 
   meta:
     image: dock.mau.dev/mautrix/meta:latest
+    platform: linux/arm64
+    profiles: ["meta"]
+    security_opt:
+      - seccomp:unconfined
     container_name: prism-meta
     restart: unless-stopped
     depends_on:
@@ -52,6 +62,10 @@ services:
 
   tunnel:
     image: cloudflare/cloudflared:latest
+    platform: linux/arm64
+    profiles: ["tunnel"]
+    security_opt:
+      - seccomp:unconfined
     container_name: prism-tunnel
     restart: unless-stopped
     command: tunnel --no-autoupdate run
