@@ -28,8 +28,18 @@ def main():
     with open(CONFIG_FILE, "r") as f:
         content = f.read()
 
-    # SQLite ayarlarını PostgreSQL ile değiştirme
-    postgres_config = f"""database:
+    # database: bloğunu bul ve değiştir
+    if "name: psycopg2" in content:
+        print("⚙️  Mevcut PostgreSQL konfigürasyonu güncelleniyor...")
+        # Şifreyi güncelle
+        new_content = re.sub(
+            r"(user: synapse\s*\n\s*password:\s*\")[^\"]+(\")",
+            fr"\1{password}\2",
+            content
+        )
+    else:
+        # SQLite ayarlarını PostgreSQL ile değiştirme
+        postgres_config = f"""database:
   name: psycopg2
   args:
     user: synapse
@@ -38,46 +48,32 @@ def main():
     database: synapse
     cp_min: 5
     cp_max: 10"""
+        
+        new_content = re.sub(
+            r"database:\s*\n\s*name:\s*sqlite3\s*\n\s*args:\s*\n\s*database:\s*[^\n]+",
+            postgres_config,
+            content
+        )
 
-    # database: bloğunu bul ve değiştir
-    # Varsayılan SQLite bloğu genellikle şöyledir:
-    # database:
-    #   name: sqlite3
-    #   args:
-    #     database: /data/homeserver.db
-    
-    new_content = re.sub(
-        r"database:\s*\n\s*name:\s*sqlite3\s*\n\s*args:\s*\n\s*database:\s*[^\n]+",
-        postgres_config,
-        content
-    )
-
-    if new_content == content:
-        print("⚠️ Bilgi: SQLite bloğu regex ile bulunamadı. Alternatif bir arama yapılıyor...")
-        # Alternatif: Sadece name: sqlite3 kısmını ve altındaki args'ı değiştirmeyi deneriz.
-        # Ama en garantisi dosyaya append etmek veya yedekli gitmek.
-        # Daha basit bir string replace deneyelim:
-        if "name: sqlite3" in content:
-            # name: sqlite3 bloğunu kesip yerine postgres ekleme
-            lines = content.split("\n")
-            output = []
-            skip = False
-            found = False
-            for line in lines:
-                if line.strip() == "database:" and "name: sqlite3" in lines[lines.index(line)+1]:
-                    output.append(postgres_config)
-                    skip = True
-                    found = True
-                    continue
-                if skip:
-                    if line.startswith("  ") or line.strip() == "":
-                        # args altındaki girintili satırları atla
+        if new_content == content:
+            print("⚠️ Bilgi: SQLite bloğu regex ile bulunamadı. Alternatif bir arama yapılıyor...")
+            if "name: sqlite3" in content:
+                lines = content.split("\n")
+                output = []
+                skip = False
+                for line in lines:
+                    if line.strip() == "database:" and "name: sqlite3" in lines[lines.index(line)+1]:
+                        output.append(postgres_config)
+                        skip = True
                         continue
-                    else:
-                        skip = False
-                if not skip:
-                    output.append(line)
-            new_content = "\n".join(output)
+                    if skip:
+                        if line.startswith("  ") or line.strip() == "":
+                            continue
+                        else:
+                            skip = False
+                    if not skip:
+                        output.append(line)
+                new_content = "\n".join(output)
 
     # Halka Açık Kayıt (Registration) Ayarı
     enable_reg = get_env_var("ENABLE_REGISTRATION")

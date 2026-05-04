@@ -15,9 +15,9 @@ docker run --rm \
     -e SYNAPSE_REPORT_STATS=no \
     matrixdotorg/synapse:latest generate
 
-echo "2. PRISM Branding Uygulanıyor..."
-# Homeserver.yaml guncelleme (Örn: isim değiştirme)
+# 2. PRISM Branding Uygulanıyor...
 sed -i "s/Synapse/$SERVER_NAME/g" ./data/synapse/homeserver.yaml
+python3 configure_synapse.py
 
 # 3. WhatsApp Bridge Konfigürasyonu...
 docker run --rm --security-opt seccomp=unconfined --platform linux/arm64 \
