@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRISM - Güvenli İletişim</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container nav-content">
+            <a href="#" class="logo">PRISM</a>
+            <div class="nav-links">
+                <a href="#download">İndir</a>
+                <a href="#news">Duyurular</a>
+                <a href="#about">Hakkında</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="container hero-content">
+            <h1>Güvenli, Özgür ve Gizli İletişim</h1>
+            <p class="hero-subtitle">
+                PRISM, kendi Matrix sunucunuz üzerinden uçtan uca şifreli mesajlaşma sağlar.
+                Merkezi olmayan, açık kaynaklı ve sizin kontrolünüzde.
+            </p>
+            <div class="hero-actions">
+                <a href="#download" class="btn btn-primary">Android Uygulamasını İndir</a>
+                <a href="#about" class="btn btn-secondary">Nasıl Çalışır?</a>
+            </div>
+        </div>
+    </header>
+
+    <section id="download" class="download-section">
+        <div class="container">
+            <h2>Uygulamayı İndir</h2>
+            <p class="section-subtitle">En son PRISM Android APK dosyasını buradan indirebilirsiniz.</p>
+            
+            <div class="download-card">
+                <div class="app-info">
+                    <div class="app-icon">P</div>
+                    <div>
+                        <h3>PRISM Android</h3>
+                        <p class="version" id="version">v1.0.0</p>
+                        <p class="file-info" id="file-info">~ 85 MB · Android 7+</p>
+                    </div>
+                </div>
+                <a href="/apk/prism-latest.apk" class="btn btn-primary download-btn" download>
+                    APK İndir
+                </a>
+            </div>
+
+            <div class="download-notes">
+                <p>
+                    <strong>Not:</strong> Uygulama şu anda Google Play Store'da yayında değil.
+                    APK dosyasını indirip yükledikten sonra güvenlik ayarlarından "Bilinmeyen kaynaklardan yükleme" seçeneğini etkinleştirmeniz gerekebilir.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section id="news" class="news-section">
+        <div class="container">
+            <h2>Duyurular & Basın</h2>
+            <p class="section-subtitle">PRISM ekibinden en son gelişmeler, duyurular ve basın bültenleri.</p>
+            <div class="news-grid" id="news-grid">
+                <!-- JavaScript ile doldurulacak -->
+            </div>
+        </div>
+    </section>
+
+    <section id="about" class="about-section">
+        <div class="container">
+            <h2>Neden PRISM?</h2>
+            <div class="features-grid">
+                <div class="feature">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Uçtan Uca Şifreleme</h3>
+                    <p>Mesajlarınız yalnızca siz ve alıcınız tarafından okunabilir.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🏠</div>
+                    <h3>Kendi Sunucunuz</h3>
+                    <p>Verileriniz size ait. Kendi Matrix sunucunuzu kendi kurallarınızla yönetin.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🌉</div>
+                    <h3>WhatsApp & Meta Köprüleri</h3>
+                    <p>Diğer platformlarla köprüler kurarak geçişi kolaylaştırın.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🪙</div>
+                    <h3>Monero Entegrasyonu</h3>
+                    <p>Gizli ve takip edilemez ödemeler için Monero node desteği.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 PRISM. Açık kaynaklı güvenli iletişim.</p>
+            <p class="footer-links">
+                <a href="/.well-known/matrix/server">Matrix Server</a>
+                <span>·</span>
+                <a href="https://github.com/Prism-Secure-Contact-App">GitHub</a>
+            </p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

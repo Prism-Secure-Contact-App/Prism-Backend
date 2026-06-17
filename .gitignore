@@ -1,16 +1,31 @@
-# Credentials & secrets
-.env
-*.env
-*.pem
-*.key
+# PRISM Backend Git Ignore
 
-# Runtime data (production'da oluşur)
+# Veri dizinleri (production verileri asla commit edilmemeli)
 data/
 
-# Python cache
+# Ortam değişkenleri
+.env
+
+# Log dosyaları
+*.log
+logs/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
 
-# macOS
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Geçici dosyalar
+tmp/
+temp/

@@ -1,21 +1,40 @@
+name: prism
+
 services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL - Synapse ve bridge'ler için ortak veritabanı
+  # ---------------------------------------------------------------------------
   db:
     image: postgres:15-alpine
     container_name: prism-db
     restart: unless-stopped
     env_file: .env
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-synapse}
-      - POSTGRES_USER=${POSTGRES_USER:-synapse}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-synapse}
+      POSTGRES_USER: ${POSTGRES_USER:-synapse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
+      - ./config/init-db.sql:/docker-entrypoint-initdb.d/02-init-db.sql:ro
+    networks:
+      - prism-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U synapse"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-synapse} -d ${POSTGRES_DB:-synapse}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          memory: 256M
 
+  # ---------------------------------------------------------------------------
+  # Matrix Synapse - ana mesajlaşma sunucusu
+  # ---------------------------------------------------------------------------
   synapse:
     image: matrixdotorg/synapse:latest
     container_name: prism-synapse
@@ -23,13 +42,25 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8008:8008"
+    env_file: .env
+    environment:
+      SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
     volumes:
       - ./data/synapse:/data
-    environment:
-      - SYNAPSE_CONFIG_PATH=/data/homeserver.yaml
+      - ./config/matrix.log.config:/data/matrix.log.config:ro
+    networks:
+      - prism-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+        reservations:
+          memory: 512M
 
+  # ---------------------------------------------------------------------------
+  # Mautrix WhatsApp Bridge - Birincil (varsayılan)
+  # ---------------------------------------------------------------------------
   whatsapp:
     image: dock.mau.dev/mautrix/whatsapp:latest
     container_name: prism-whatsapp
@@ -37,23 +68,231 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      synapse:
+        condition: service_started
     volumes:
       - ./data/whatsapp:/data
+    networks:
+      - prism-net
+    command: >
+      sh -c "
+        if [ ! -f /data/config.yaml ]; then
+          python -m mautrix_whatsapp -c /data/config.yaml -g || true;
+        fi &&
+        python -m mautrix_whatsapp -c /data/config.yaml
+      "
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 128M
 
+  # ---------------------------------------------------------------------------
+  # Mautrix WhatsApp Bridge - İkincil (opsiyonel, ikinci hesap için)
+  # ---------------------------------------------------------------------------
+  whatsapp-2:
+    image: dock.mau.dev/mautrix/whatsapp:latest
+    container_name: prism-whatsapp-2
+    restart: unless-stopped
+    profiles: ["extra-whatsapp"]
+    depends_on:
+      db:
+        condition: service_healthy
+      synapse:
+        condition: service_started
+    volumes:
+      - ./data/whatsapp-2:/data
+    networks:
+      - prism-net
+    command: >
+      sh -c "
+        if [ ! -f /data/config.yaml ]; then
+          python -m mautrix_whatsapp -c /data/config.yaml -g || true;
+        fi &&
+        python -m mautrix_whatsapp -c /data/config.yaml
+      "
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # ---------------------------------------------------------------------------
+  # Mautrix Meta (Instagram/Facebook) Bridge - varsayılan kapalı
+  # ---------------------------------------------------------------------------
   meta:
     image: dock.mau.dev/mautrix/meta:latest
     container_name: prism-meta
     restart: unless-stopped
+    profiles: ["meta"]
     depends_on:
       db:
         condition: service_healthy
+      synapse:
+        condition: service_started
     volumes:
       - ./data/meta:/data
+    networks:
+      - prism-net
+    command: >
+      sh -c "
+        if [ ! -f /data/config.yaml ]; then
+          python -m mautrix_meta -c /data/config.yaml -g || true;
+        fi &&
+        python -m mautrix_meta -c /data/config.yaml
+      "
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 128M
 
+  # ---------------------------------------------------------------------------
+  # Monero Node - pruned node varsayılan
+  # ---------------------------------------------------------------------------
+  monerod:
+    image: sethsimmons/simple-monerod:latest
+    container_name: prism-monerod
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data/monero:/monero
+    networks:
+      - prism-net
+    expose:
+      - "18080"
+      - "18081"
+      - "18089"
+    command:
+      - --data-dir=/monero
+      - --prune-blockchain
+      - --no-igd
+      - --rpc-bind-ip=0.0.0.0
+      - --rpc-bind-port=18081
+      - --rpc-restricted-bind-port=18089
+      - --confirm-external-bind
+      - --log-level=1
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Cloudflare Tunnel - dış dünyaya güvenli çıkış
+  # ---------------------------------------------------------------------------
   tunnel:
     image: cloudflare/cloudflared:latest
     container_name: prism-tunnel
     restart: unless-stopped
-    command: tunnel --no-autoupdate run
+    env_file: .env
     environment:
-      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN is required}
+    command: tunnel --no-autoupdate run
+    networks:
+      - prism-net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          memory: 32M
+
+  # ---------------------------------------------------------------------------
+  # PRISM AI Relay - WhatsApp/Meta AI mesajlarını Matrix room'una yönlendir
+  # ---------------------------------------------------------------------------
+  ai-relay:
+    build:
+      context: ./services/prism-ai-relay
+      dockerfile: Dockerfile
+    container_name: prism-ai-relay
+    restart: unless-stopped
+    profiles: ["ai-relay"]
+    env_file: .env
+    environment:
+      MATRIX_HOMESERVER: http://synapse:8008
+      MATRIX_AI_USER: ${MATRIX_AI_USER:-}
+      MATRIX_AI_PASSWORD: ${MATRIX_AI_PASSWORD:-}
+      META_AI_ROOM_NAME: ${META_AI_ROOM_NAME:-Meta AI}
+    depends_on:
+      synapse:
+        condition: service_started
+    networks:
+      - prism-net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          memory: 32M
+
+  # ---------------------------------------------------------------------------
+  # PRISM Payments Service - bakiye / ödeme API
+  # ---------------------------------------------------------------------------
+  payments:
+    build:
+      context: ./services/prism-payments
+      dockerfile: Dockerfile
+    container_name: prism-payments
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-synapse}:${POSTGRES_PASSWORD}@db/payments?sslmode=disable
+      MONEROD_RPC_URL: http://monerod:18089
+      BREEZ_API_KEY: ${BREEZ_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      monerod:
+        condition: service_started
+    networks:
+      - prism-net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          memory: 64M
+
+  # ---------------------------------------------------------------------------
+  # PRISM Website - prismas.net (indirme + duyurular)
+  # ---------------------------------------------------------------------------
+  website:
+    build:
+      context: ../prismas.net
+      dockerfile: Dockerfile
+    container_name: prism-website
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DOMAIN: ${DOMAIN:-prismas.net}
+      MATRIX_DOMAIN: ${MATRIX_DOMAIN:-matrix.${DOMAIN:-prismas.net}}
+    networks:
+      - prism-net
+    volumes:
+      - ./data/website/apk:/usr/share/nginx/html/apk:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          memory: 32M
+
+networks:
+  prism-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
