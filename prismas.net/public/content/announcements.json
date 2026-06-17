@@ -1,0 +1,16 @@
+{
+  "announcements": [
+    {
+      "title": "PRISM Android Artık İndirilebilir",
+      "summary": "İlk beta sürümü yayında. Kendi Matrix sunucunuz üzerinden güvenli mesajlaşmaya başlayabilirsiniz.",
+      "date": "2025-06-17",
+      "tag": "Yayın"
+    },
+    {
+      "title": "WhatsApp Köprüsü Aktif",
+      "summary": "WhatsApp hesabınızı PRISM üzerinden kullanabilir, mesajlarınızı kendi sunucunuza taşıyabilirsiniz.",
+      "date": "2025-06-17",
+      "tag": "Özellik"
+    }
+  ]
+}
