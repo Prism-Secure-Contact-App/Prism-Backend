@@ -59,7 +59,7 @@ services:
           memory: 512M
 
   # ---------------------------------------------------------------------------
-  # Mautrix WhatsApp Bridge - Birincil (varsayılan)
+  # Mautrix WhatsApp Bridge
   # ---------------------------------------------------------------------------
   whatsapp:
     image: dock.mau.dev/mautrix/whatsapp:latest
@@ -90,94 +90,27 @@ services:
           memory: 128M
 
   # ---------------------------------------------------------------------------
-  # Mautrix WhatsApp Bridge - İkincil (opsiyonel, ikinci hesap için)
-  # ---------------------------------------------------------------------------
-  whatsapp-2:
-    image: dock.mau.dev/mautrix/whatsapp:latest
-    container_name: prism-whatsapp-2
-    restart: unless-stopped
-    profiles: ["extra-whatsapp"]
-    depends_on:
-      db:
-        condition: service_healthy
-      synapse:
-        condition: service_started
-    volumes:
-      - ./data/whatsapp-2:/data
-    networks:
-      - prism-net
-    command: >
-      sh -c "
-        if [ ! -f /data/config.yaml ]; then
-          python -m mautrix_whatsapp -c /data/config.yaml -g || true;
-        fi &&
-        python -m mautrix_whatsapp -c /data/config.yaml
-      "
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-        reservations:
-          memory: 128M
-
-  # ---------------------------------------------------------------------------
-  # Mautrix Meta (Instagram/Facebook) Bridge - varsayılan kapalı
-  # ---------------------------------------------------------------------------
-  meta:
-    image: dock.mau.dev/mautrix/meta:latest
-    container_name: prism-meta
-    restart: unless-stopped
-    profiles: ["meta"]
-    depends_on:
-      db:
-        condition: service_healthy
-      synapse:
-        condition: service_started
-    volumes:
-      - ./data/meta:/data
-    networks:
-      - prism-net
-    command: >
-      sh -c "
-        if [ ! -f /data/config.yaml ]; then
-          python -m mautrix_meta -c /data/config.yaml -g || true;
-        fi &&
-        python -m mautrix_meta -c /data/config.yaml
-      "
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-        reservations:
-          memory: 128M
-
-  # ---------------------------------------------------------------------------
-  # Monero Node - pruned node varsayılan
+  # Monero Node - pruned node
   # ---------------------------------------------------------------------------
   monerod:
-    image: sethsimmons/simple-monerod:latest
-    container_name: prism-monerod
+    image: ghcr.io/sethforprivacy/simple-monerod:latest
+    container_name: monero-node
     restart: unless-stopped
-    env_file: .env
     volumes:
-      - ./data/monero:/monero
+      - ./data/monero:/home/monero/.bitmonero
     networks:
       - prism-net
     expose:
       - "18080"
       - "18081"
-      - "18089"
     command:
-      - --data-dir=/monero
-      - --prune-blockchain
-      - --no-igd
       - --rpc-bind-ip=0.0.0.0
       - --rpc-bind-port=18081
-      - --rpc-restricted-bind-port=18089
       - --confirm-external-bind
-      - --log-level=1
+      - --restricted-rpc
+      - --no-igd
+      - --enable-dns-blocklist
+      - --prune-blockchain
     deploy:
       resources:
         limits:
@@ -187,7 +120,118 @@ services:
           memory: 512M
 
   # ---------------------------------------------------------------------------
-  # Cloudflare Tunnel - dış dünyaya güvenli çıkış
+  # Monero Wallet RPC
+  # ---------------------------------------------------------------------------
+  monero-wallet-rpc:
+    image: ghcr.io/sethforprivacy/simple-monero-wallet-rpc:latest
+    container_name: monero-wallet-rpc
+    restart: unless-stopped
+    volumes:
+      - ./data/monero:/home/monero/.bitmonero
+      - ./data/monero-wallets:/wallets
+    networks:
+      - prism-net
+    expose:
+      - "18083"
+    command:
+      - --wallet-file=/wallets/prism_wallet
+      - --rpc-bind-port=18083
+      - --daemon-address=monero-node:18081
+      - --disable-rpc-login
+      - --trusted-daemon
+    depends_on:
+      - monerod
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # ---------------------------------------------------------------------------
+  # PRISM Monero API
+  # ---------------------------------------------------------------------------
+  monero-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.monero-api
+    container_name: prism-monero-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MONERO_WALLET_RPC_URL: http://monero-wallet-rpc:18083
+    networks:
+      - prism-net
+    depends_on:
+      - monero-wallet-rpc
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          memory: 64M
+
+  # ---------------------------------------------------------------------------
+  # PRISM LLM API
+  # ---------------------------------------------------------------------------
+  llm-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.llm-api
+    container_name: prism-llm-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./data/llm-api:/data
+    environment:
+      - PRISM_LLM_API_PORT=8080
+      - LLM_API_DB_PATH=/data/llm_api_keys.db
+      - META_AI_ENDPOINT=${META_AI_ENDPOINT:-}
+      - META_AI_API_KEY=${META_AI_API_KEY:-}
+      - SYNAPSE_URL=http://synapse:8008
+      - SYNAPSE_ADMIN_TOKEN=${SYNAPSE_ADMIN_TOKEN:-}
+    networks:
+      - prism-net
+    depends_on:
+      - synapse
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # ---------------------------------------------------------------------------
+  # PRISM Retention Bridge
+  # ---------------------------------------------------------------------------
+  retention:
+    build:
+      context: .
+      dockerfile: Dockerfile.retention
+    container_name: prism-retention
+    restart: unless-stopped
+    environment:
+      - SYNAPSE_URL=http://synapse:8008
+      - SYNAPSE_ADMIN_TOKEN=${SYNAPSE_ADMIN_TOKEN:-}
+      - SCAN_INTERVAL_MIN=60
+    networks:
+      - prism-net
+    depends_on:
+      - synapse
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          memory: 64M
+
+  # ---------------------------------------------------------------------------
+  # Cloudflare Tunnel - matrix.fathertkt.uk için güvenli çıkış
   # ---------------------------------------------------------------------------
   tunnel:
     image: cloudflare/cloudflared:latest
@@ -208,69 +252,11 @@ services:
           memory: 32M
 
   # ---------------------------------------------------------------------------
-  # PRISM AI Relay - WhatsApp/Meta AI mesajlarını Matrix room'una yönlendir
-  # ---------------------------------------------------------------------------
-  ai-relay:
-    build:
-      context: ./services/prism-ai-relay
-      dockerfile: Dockerfile
-    container_name: prism-ai-relay
-    restart: unless-stopped
-    profiles: ["ai-relay"]
-    env_file: .env
-    environment:
-      MATRIX_HOMESERVER: http://synapse:8008
-      MATRIX_AI_USER: ${MATRIX_AI_USER:-}
-      MATRIX_AI_PASSWORD: ${MATRIX_AI_PASSWORD:-}
-      META_AI_ROOM_NAME: ${META_AI_ROOM_NAME:-Meta AI}
-    depends_on:
-      synapse:
-        condition: service_started
-    networks:
-      - prism-net
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 128M
-        reservations:
-          memory: 32M
-
-  # ---------------------------------------------------------------------------
-  # PRISM Payments Service - bakiye / ödeme API
-  # ---------------------------------------------------------------------------
-  payments:
-    build:
-      context: ./services/prism-payments
-      dockerfile: Dockerfile
-    container_name: prism-payments
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-synapse}:${POSTGRES_PASSWORD}@db/payments?sslmode=disable
-      MONEROD_RPC_URL: http://monerod:18089
-      BREEZ_API_KEY: ${BREEZ_API_KEY:-}
-    depends_on:
-      db:
-        condition: service_healthy
-      monerod:
-        condition: service_started
-    networks:
-      - prism-net
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          memory: 64M
-
-  # ---------------------------------------------------------------------------
   # PRISM Website - prismas.net (indirme + duyurular)
   # ---------------------------------------------------------------------------
   website:
     build:
-      context: ../prismas.net
+      context: ./prismas.net
       dockerfile: Dockerfile
     container_name: prism-website
     restart: unless-stopped
@@ -280,6 +266,8 @@ services:
       MATRIX_DOMAIN: ${MATRIX_DOMAIN:-matrix.${DOMAIN:-prismas.net}}
     networks:
       - prism-net
+    ports:
+      - "80:80"
     volumes:
       - ./data/website/apk:/usr/share/nginx/html/apk:ro
     deploy:

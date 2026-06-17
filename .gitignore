@@ -29,3 +29,11 @@ Thumbs.db
 # Geçici dosyalar
 tmp/
 temp/
+
+# Android SDK / Gradle in tools (large binaries, tracked in Frontend_Source)
+tools/android/
+
+# Backup files
+*.backup.*
+*.old.root
+
