@@ -20,20 +20,12 @@ sed -i "s/Synapse/$SERVER_NAME/g" ./data/synapse/homeserver.yaml
 python3 configure_synapse.py
 
 # 3. WhatsApp Bridge Konfigürasyonu...
-docker run --rm --security-opt seccomp=unconfined --platform linux/arm64 \
-    -v $(pwd)/data/whatsapp:/data \
-    dock.mau.dev/mautrix/whatsapp:latest \
-    -c /data/config.yaml # Sadece config uretimi icin
+echo 1234 | sudo -S rm -f ./data/whatsapp/config.yaml
+echo 1234 | sudo -S python3 configure_whatsapp.py
 
-# Bridge konfigürasyonlarını otomatikleştir
-sed -i "s/address: http:\/\/localhost:8008/address: http:\/\/synapse:8008/g" ./data/whatsapp/config.yaml
-sed -i "s/domain: localhost/domain: $DOMAIN/g" ./data/whatsapp/config.yaml
-
-echo "4. Instagram (Meta) Bridge Konfigürasyonu..."
-docker run --rm --security-opt seccomp=unconfined --platform linux/arm64 \
-    -v $(pwd)/data/meta:/data \
-    dock.mau.dev/mautrix/meta:latest \
-    -c /data/config.yaml # Sadece config uretimi icin
+# 4. Instagram (Meta) Bridge Konfigürasyonu...
+echo 1234 | sudo -S rm -f ./data/meta/config.yaml
+echo 1234 | sudo -S python3 configure_meta.py
 
 echo "5. Registration Dosyaları Üretiliyor..."
 chmod +x ./generate-registrations.sh

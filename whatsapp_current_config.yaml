@@ -1,0 +1,37 @@
+homeserver:
+  address: http://synapse:8008
+  domain: matrix.fathertkt.uk
+  software: standard
+appservice:
+  address: http://whatsapp:29318
+  hostname: 0.0.0.0
+  port: 29318
+  database:
+    type: postgres
+    uri: postgres://synapse:1234@db/mautrix_whatsapp?sslmode=disable
+  id: whatsapp
+  bot:
+    username: pwb-bot
+    displayname: WhatsApp Bridge Bot
+    avatar: mxc://maunium.net/NeXNQarUbrlQBiwhd5226463
+  as_token: ''
+  hs_token: ''
+bridge:
+  username_template: whatsapp_{}
+  displayname_template: '{displayname} (WA)'
+  personal_filtering_spaces: false
+  delivery_receipts: false
+  message_status_events: false
+  message_error_notices: false
+  rest_api: false
+  encryption:
+    allow: true
+    default: true
+    require: false
+    appservice: false
+    client: false
+  permissions:
+    '*': admin
+hacky_config_migrator: true
+network:
+  hacky_legacy_config_migrator: true

@@ -19,105 +19,54 @@ def get_env_var(var_name):
 def main():
     password = get_env_var("POSTGRES_PASSWORD")
     if not password:
-        print("❌ HATA: .env dosyasında POSTGRES_PASSWORD bulunamadı!")
-        sys.exit(1)
+        password = "1234" # Fallback
 
-    # 1. Meta config.yaml Düzenleme
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
-            content = f.read()
-
-        print("⚙️  Meta (Instagram) config.yaml ayarlanıyor...")
-        
-        # Homeserver Adresi
-        content = re.sub(
-            r"address:\s*http://localhost:8008",
-            "address: http://synapse:8008",
-            content
-        )
-        
-        # Domain name
-        server_name = get_env_var("SERVER_NAME")
-        if server_name:
-            content = re.sub(
-                r"domain:\s*[a-zA-Z0-9.-]+",
-                f"domain: {server_name}",
-                content
-            )
-
-        # Database Postgres Yapma
-        postgres_url = f"postgres://synapse:{password}@db/meta?sslmode=disable"
-        content = re.sub(
-            r"type:\s*sqlite3[^\n]*",
-            "type: postgres",
-            content
-        )
-        content = re.sub(
-            r"uri:\s*file:/data/mautrix-meta.db\?[^\n]+",
-            f"uri: {postgres_url}",
-            content
-        )
-
-        # Homeserver Adresi
-        content = re.sub(
-            r"address:\s*http://[a-zA-Z0-9_-]+:8008",
-            "address: http://synapse:8008",
-            content
-        )
-        
-        # Appservice Address (How Synapse reaches the bridge)
-        content = re.sub(
-            r"address:\s*http://[a-zA-Z0-9_-]+:29319",
-            "address: http://meta:29319",
-            content
-        )
-
-        # Sender Localpart — MUST match bot.username and be covered by user namespace regex.
-        # Why: Synapse rejects AS transactions whose sender MXID isn't in the declared namespace
-        # (M_EXCLUSIVE). Previously set to "meta-as" which wasn't in namespace → bridge silent.
-        content = re.sub(
-            r"sender_localpart:\s*[a-zA-Z0-9_-]+",
-            "sender_localpart: pmb-bot",
-            content,
-            count=1
-        )
-        
-        # Bot Username (Changed to avoid appservice sync restriction and reservation issues)
-        content = re.sub(
-            r"username:\s*[a-zA-Z0-9_-]+bot",
-            "username: pmb-bot",
-            content
-        )
-
-        # Bridge Autojoin & Auto-leave
-        content = re.sub(r"autojoin:\s*false", "autojoin: true", content)
-        content = re.sub(r"auto_join_on_invite:\s*false", "auto_join_on_invite: true", content)
-
-        # Encryption Support - Aggressive Update
-        print("🔐 Encryption (E2EE) aktif ediliyor...")
-        content = re.sub(r"allow:\s*false", "allow: true", content)
-        content = re.sub(r"default:\s*false", "default: true", content)
-        # 3. Encryption bloğunu tamamen zorla (appservice: true dahil)
-        if "encryption:" in content:
-            if "appservice:" in content:
-                content = re.sub(r"appservice:\s*true", "appservice: false", content)
-            else:
-                content = re.sub(r"(encryption:.*?\n)", r"\1    appservice: false\n", content)
-            
-            content = re.sub(r"allow:\s*false", "allow: true", content)
-            content = re.sub(r"default:\s*false", "default: true", content)
-
-        # Namespaces Fix
-        if server_name:
-            content = re.sub(
-                r"regex:\s*'?@([a-zA-Z0-9_-]+):[a-zA-Z0-9.-]+'?",
-                fr"regex: '@\1:{server_name}'",
-                content
-            )
-
-        with open(CONFIG_FILE, "w") as f:
-            f.write(content)
-        print("✅ config.yaml güncellendi.")
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    
+    print("⚙️  Meta config.yaml sıfırdan oluşturuluyor (V4 Uyumluluk)...")
+    
+    domain = "matrix.fathertkt.uk"
+    postgres_url = f"postgres://synapse:{password}@db/mautrix_meta?sslmode=disable"
+    
+    # Minimal and complete V4 configuration for Meta bridge
+    config_content = f"""homeserver:
+    address: http://synapse:8008
+    domain: {domain}
+    software: standard
+appservice:
+    address: http://meta:29319
+    hostname: 0.0.0.0
+    port: 29319
+    database:
+        type: postgres
+        uri: {postgres_url}
+    id: meta
+    bot:
+        username: pmb-bot
+        displayname: Instagram Bridge Bot
+        avatar: mxc://maunium.net/NeXNQarUbrlQBiwhd5226463
+    as_token: ''
+    hs_token: ''
+bridge:
+    username_template: meta_{{}}
+    displayname_template: '{{displayname}} (IG)'
+    personal_filtering_spaces: false
+    delivery_receipts: false
+    message_status_events: false
+    message_error_notices: false
+    rest_api: false
+    encryption:
+        allow: true
+        default: true
+        require: false
+        appservice: false
+        client: false
+    permissions:
+        "*": admin
+"""
+    with open(CONFIG_FILE, "w") as f:
+        f.write(config_content)
+    print("✅ config.yaml oluşturuldu.")
 
     # 1.1. Registration Dosyasına Encryption Desteği Ekleme & Sender Localpart Fix
     REG_FILE = "./data/meta/registration.yaml"
@@ -128,32 +77,31 @@ def main():
         # encryption: true ekle
         if "encryption: true" not in reg_content:
             print("🔐 Registration dosyasına encryption desteği ekleniyor...")
-            reg_content += "\nencryption: true\n"
+            reg_content += "\\nencryption: true\\n"
         
         # sender_localpart MUST match bot.username and be inside the user namespace below.
         reg_content = re.sub(
-            r"sender_localpart:\s*[a-zA-Z0-9_-]+",
+            r"sender_localpart:\\s*[a-zA-Z0-9_-]+",
             "sender_localpart: pmb-bot",
             reg_content
         )
         
-        # namespaces bloğunu tamamen temizle ve yeniden oluştur
-        
         # as_token, hs_token gibi önemli kısımları koru, namespaces kısmını baştan yaz
-        pattern = r"(    users:.*?\n)(de\.sorunome|receive_ephemeral|encryption)"
-        replacement = """    users:
-        - regex: ^@pmb-bot:matrix\.fathertkt\.uk$
+        pattern = r"(    users:.*?\\n)(de\\.sorunome|receive_ephemeral|encryption)"
+        
+        replacement = f"""    users:
+        - regex: ^@pmb-bot:{domain}$
           exclusive: true
-        - regex: ^@meta_.*:matrix\.fathertkt\.uk$
+        - regex: ^@meta_.*:{domain}$
           exclusive: true
-\\2"""
+\\\\2"""
         
         if "    users:" in reg_content:
             reg_content = re.sub(pattern, replacement, reg_content, flags=re.DOTALL)
         else:
             reg_content = re.sub(
-                r"namespaces:\n",
-                "namespaces:\n" + replacement.replace("\\2", "de.sorunome"),
+                r"namespaces:\\n",
+                "namespaces:\\n" + replacement.replace("\\\\2", "de.sorunome"),
                 reg_content
             )
 
@@ -161,7 +109,7 @@ def main():
             f.write(reg_content)
         
         # Kopya dosyaya da aktar
-        SYNAPSE_REG = "./data/synapse/appservice-instagram.yaml"
+        SYNAPSE_REG = "./data/synapse/appservice-meta.yaml"
         with open(SYNAPSE_REG, "w") as f:
             f.write(reg_content)
         print("✅ registration.yaml güncellendi (encryption + sender_localpart)")
@@ -171,16 +119,16 @@ def main():
         with open(SYNAPSE_CONFIG, "r") as f:
             content = f.read()
 
-        if "/data/appservice-instagram.yaml" not in content:
+        if "/data/appservice-meta.yaml" not in content:
             print("⚙️  Synapse'e Meta Registration Ekleniyor...")
             if "app_service_config_files:" in content:
-                content = re.sub(
-                    r"app_service_config_files:\s*\n",
-                    "app_service_config_files:\n  - /data/appservice-instagram.yaml\n",
+                 content = re.sub(
+                    r"app_service_config_files:\\s*\\n",
+                    "app_service_config_files:\\n  - /data/appservice-meta.yaml\\n",
                     content
                 )
             else:
-                content += "\n\napp_service_config_files:\n  - /data/appservice-instagram.yaml\n"
+                 content += "\\n\\napp_service_config_files:\\n  - /data/appservice-meta.yaml\\n"
             
             with open(SYNAPSE_CONFIG, "w") as f:
                 f.write(content)

@@ -19,108 +19,54 @@ def get_env_var(var_name):
 def main():
     password = get_env_var("POSTGRES_PASSWORD")
     if not password:
-        print("❌ HATA: .env dosyasında POSTGRES_PASSWORD bulunamadı!")
-        sys.exit(1)
+        password = "1234" # Fallback
 
-    # 1. WhatsApp config.yaml Düzenleme
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
-            content = f.read()
-
-        print("⚙️  WhatsApp config.yaml ayarlanıyor...")
-        
-        # Homeserver Adresi
-        content = re.sub(
-            r"address:\s*http://[a-zA-Z0-9_-]+:8008",
-            "address: http://synapse:8008",
-            content
-        )
-        
-        # Appservice Address
-        content = re.sub(
-            r"address:\s*http://[a-zA-Z0-9_-]+:29318",
-            "address: http://whatsapp:29318",
-            content
-        )
-        
-        # Domain name
-        server_name = get_env_var("SERVER_NAME")
-        if server_name:
-            content = re.sub(
-                r"domain:\s*[a-zA-Z0-9.-]+",
-                f"domain: {server_name}",
-                content
-            )
-
-        # Database Postgres Yapma
-        postgres_url = f"postgres://synapse:{password}@db/whatsapp?sslmode=disable"
-        content = re.sub(
-            r"type:\s*sqlite3-nk\n\s*uri:\s*file:/data/mautrix-whatsapp.db\?_auth_founder=1",
-            f"type: postgres\n    uri: {postgres_url}",
-            content
-        )
-        # Bazen farklı bir sqlite şablonu olabilir
-        content = re.sub(
-            r"uri:\s*file:/data/mautrix-whatsapp.db\?[^\n]+",
-            f"uri: {postgres_url}",
-            content
-        )
-        content = re.sub(
-            r"type:\s*sqlite3[^\n]*",
-            "type: postgres",
-            content
-        )
-
-        # Sender Localpart — MUST match bot.username and be covered by user namespace regex.
-        # Why: Synapse rejects AS transactions whose sender MXID isn't in the declared namespace
-        # (M_EXCLUSIVE). Previously set to "whatsapp-as" which wasn't in namespace → bridge silent.
-        content = re.sub(
-            r"sender_localpart:\s*[a-zA-Z0-9_-]+",
-            "sender_localpart: pwb-bot",
-            content,
-            count=1
-        )
-        
-        # Bot Username (Changed to avoid appservice sync restriction and reservation issues)
-        content = re.sub(
-            r"username:\s*[a-zA-Z0-9_-]+bot",
-            "username: pwb-bot",
-            content
-        )
-
-        # Bridge Autojoin & Auto-leave
-        content = re.sub(r"autojoin:\s*false", "autojoin: true", content)
-        content = re.sub(r"auto_join_on_invite:\s*false", "auto_join_on_invite: true", content)
-
-        # Encryption Support - Aggressive Update
-        print("🔐 Encryption (E2EE) aktif ediliyor...")
-        # 1. 'allow: false' -> 'allow: true'
-        content = re.sub(r"allow:\s*false", "allow: true", content)
-        # 2. 'default: false' -> 'default: true'
-        content = re.sub(r"default:\s*false", "default: true", content)
-        
-        # 3. Encryption bloğunu tamamen zorla (appservice: true dahil)
-        if "encryption:" in content:
-            # appservice: ayarını ekle veya güncelle (Synapse 500 hatasını çözmek için /sync yerine push kullanmalı)
-            if "appservice:" in content:
-                content = re.sub(r"appservice:\s*true", "appservice: false", content)
-            else:
-                content = re.sub(r"(encryption:.*?\n)", r"\1    appservice: false\n", content)
-            
-            content = re.sub(r"allow:\s*false", "allow: true", content)
-            content = re.sub(r"default:\s*false", "default: true", content)
-
-        # Namespaces Fix (Ensures correct server name in regex)
-        if server_name:
-            content = re.sub(
-                r"regex:\s*'?@([a-zA-Z0-9_-]+):[a-zA-Z0-9.-]+'?",
-                fr"regex: '@\1:{server_name}'",
-                content
-            )
-
-        with open(CONFIG_FILE, "w") as f:
-            f.write(content)
-        print("✅ config.yaml güncellendi.")
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    
+    print("⚙️  WhatsApp config.yaml sıfırdan oluşturuluyor (V4 Uyumluluk)...")
+    
+    domain = "matrix.fathertkt.uk"
+    postgres_url = f"postgres://synapse:{password}@db/mautrix_whatsapp?sslmode=disable"
+    
+    # Minimal and complete V4 configuration for WhatsApp bridge
+    config_content = f"""homeserver:
+    address: http://synapse:8008
+    domain: {domain}
+    software: standard
+appservice:
+    address: http://whatsapp:29318
+    hostname: 0.0.0.0
+    port: 29318
+    database:
+        type: postgres
+        uri: {postgres_url}
+    id: whatsapp
+    bot:
+        username: pwb-bot
+        displayname: WhatsApp Bridge Bot
+        avatar: mxc://maunium.net/NeXNQarUbrlQBiwhd5226463
+    as_token: ''
+    hs_token: ''
+bridge:
+    username_template: whatsapp_{{}}
+    displayname_template: '{{displayname}} (WA)'
+    personal_filtering_spaces: false
+    delivery_receipts: false
+    message_status_events: false
+    message_error_notices: false
+    rest_api: false
+    encryption:
+        allow: true
+        default: true
+        require: false
+        appservice: false
+        client: false
+    permissions:
+        "*": admin
+"""
+    with open(CONFIG_FILE, "w") as f:
+        f.write(config_content)
+    print("✅ config.yaml oluşturuldu.")
 
     # 1.1. Registration Dosyasına Encryption Desteği Ekleme & Sender Localpart Fix
     REG_FILE = "./data/whatsapp/registration.yaml"
@@ -131,39 +77,31 @@ def main():
         # encryption: true ekle
         if "encryption: true" not in reg_content:
             print("🔐 Registration dosyasına encryption desteği ekleniyor...")
-            reg_content += "\nencryption: true\n"
+            reg_content += "\\nencryption: true\\n"
         
         # sender_localpart MUST match bot.username and be inside the user namespace below.
         reg_content = re.sub(
-            r"sender_localpart:\s*[a-zA-Z0-9_-]+",
+            r"sender_localpart:\\s*[a-zA-Z0-9_-]+",
             "sender_localpart: pwb-bot",
             reg_content
         )
         
-        # Botu namespace'den çıkar (Böylece /sync yapabilir ve register edilebilir)
-        # Sadece whatsapp_.* namespace'ini bırakıyoruz.
-        # namespaces bloğunu tamamen temizle ve yeniden oluştur
-        
         # as_token, hs_token gibi önemli kısımları koru, namespaces kısmını baştan yaz
-        pattern = r"(    users:.*?\n)(de\.sorunome|receive_ephemeral|encryption)"
-        
-        # Domain name fallback
-        domain = server_name if server_name else "matrix.fathertkt.uk"
+        pattern = r"(    users:.*?\\n)(de\\.sorunome|receive_ephemeral|encryption)"
         
         replacement = f"""    users:
         - regex: ^@pwb-bot:{domain}$
           exclusive: true
         - regex: ^@whatsapp_.*:{domain}$
           exclusive: true
-\\2"""
+\\\\2"""
         
         if "    users:" in reg_content:
             reg_content = re.sub(pattern, replacement, reg_content, flags=re.DOTALL)
         else:
-            # Eğer yoksa namespaces: altına ekle
             reg_content = re.sub(
-                r"namespaces:\n",
-                "namespaces:\n" + replacement.replace("\\2", "de.sorunome"),
+                r"namespaces:\\n",
+                "namespaces:\\n" + replacement.replace("\\\\2", "de.sorunome"),
                 reg_content
             )
 
@@ -181,29 +119,20 @@ def main():
         with open(SYNAPSE_CONFIG, "r") as f:
             content = f.read()
 
-        if "app_service_config_files" not in content:
+        if "/data/appservice-whatsapp.yaml" not in content:
             print("⚙️  Synapse'e WhatsApp Registration Ekleniyor...")
-            app_service_block = """app_service_config_files:
-  - /data/appservice-whatsapp.yaml"""
+            if "app_service_config_files:" in content:
+                 content = re.sub(
+                    r"app_service_config_files:\\s*\\n",
+                    "app_service_config_files:\\n  - /data/appservice-whatsapp.yaml\\n",
+                    content
+                )
+            else:
+                 content += "\\n\\napp_service_config_files:\\n  - /data/appservice-whatsapp.yaml\\n"
             
-            # En güvenlisi en sonuna eklemek (Top-level)
-            content += f"\n\n{app_service_block}\n"
             with open(SYNAPSE_CONFIG, "w") as f:
                 f.write(content)
             print("✅ homeserver.yaml AppService ayarı eklendi.")
-        else:
-            if "/data/appservice-whatsapp.yaml" not in content:
-                print("⚙️  Mevcut app_service_config_files altına WhatsApp ekleniyor...")
-                # registration.yaml gibi eski girdileri temizle/değiştir
-                content = content.replace("- /data/registration.yaml", "- /data/appservice-whatsapp.yaml")
-                if "/data/appservice-whatsapp.yaml" not in content:
-                    content = re.sub(
-                        r"app_service_config_files:\s*\n",
-                        "app_service_config_files:\n  - /data/appservice-whatsapp.yaml\n",
-                        content
-                    )
-                with open(SYNAPSE_CONFIG, "w") as f:
-                    f.write(content)
 
 if __name__ == "__main__":
     main()

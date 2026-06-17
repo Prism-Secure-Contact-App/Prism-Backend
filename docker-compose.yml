@@ -5,9 +5,9 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-synapse}
-      - POSTGRES_USER=${POSTGRES_USER:-synapse}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=synapse
+      - POSTGRES_USER=synapse
+      - POSTGRES_PASSWORD=
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
@@ -17,7 +17,7 @@ services:
       retries: 5
 
   synapse:
-    image: matrixdotorg/synapse:v1.119.0
+    image: matrixdotorg/synapse:latest
     container_name: prism-synapse
     restart: unless-stopped
     depends_on:
@@ -42,16 +42,38 @@ services:
     volumes:
       - ./data/whatsapp:/data
 
-  meta:
-    image: dock.mau.dev/mautrix/meta:latest
-    container_name: prism-meta
+  prism-llm-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.llm-api
+    container_name: prism-llm-api
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    privileged: true
+    ports:
+      - "8080:8080"
     volumes:
-      - ./data/meta:/data
+      - ./data/llm-api:/data
+    environment:
+      - PRISM_LLM_API_PORT=8080
+      - LLM_API_DB_PATH=/data/llm_api_keys.db
+      - META_AI_ENDPOINT=
+      - META_AI_API_KEY=
+      - SYNAPSE_URL=http://synapse:8008
+      - SYNAPSE_ADMIN_TOKEN=syt_cHJpc21hZG1pbg_wuQixcxJyJRneuNpemJm_0NnqhK
+    depends_on:
+      - synapse
+
+  prism-retention:
+    build:
+      context: .
+      dockerfile: Dockerfile.retention
+    container_name: prism-retention
+    restart: unless-stopped
+    environment:
+      - SYNAPSE_URL=http://synapse:8008
+      - SYNAPSE_ADMIN_TOKEN=syt_cHJpc21hZG1pbg_wuQixcxJyJRneuNpemJm_0NnqhK
+      - SCAN_INTERVAL_MIN=60
+    depends_on:
+      - synapse
 
   tunnel:
     image: cloudflare/cloudflared:latest
@@ -60,4 +82,55 @@ services:
     privileged: true
     command: tunnel --no-autoupdate run
     environment:
-      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+      - TUNNEL_TOKEN=
+
+  monerod:
+    image: ghcr.io/sethforprivacy/simple-monerod:latest
+    container_name: monero-node
+    restart: unless-stopped
+    volumes:
+      - /home/fatih/prism-monero/data:/home/monero/.bitmonero
+    ports:
+      - "18080:18080"
+      - "18081:18081"
+    command:
+      - "--rpc-bind-ip=0.0.0.0"
+      - "--rpc-bind-port=18081"
+      - "--confirm-external-bind"
+      - "--restricted-rpc"
+      - "--no-igd"
+      - "--enable-dns-blocklist"
+      - "--prune-blockchain"
+
+  monero-wallet-rpc:
+    image: ghcr.io/sethforprivacy/simple-monero-wallet-rpc:latest
+    container_name: monero-wallet-rpc
+    restart: unless-stopped
+    volumes:
+      - /home/fatih/prism-monero/data:/home/monero/.bitmonero
+      - /home/fatih/prism-monero/wallets:/wallets
+    ports:
+      - "18083:18083"
+    command:
+      - "--wallet-file=/wallets/prism_wallet"
+      - "--rpc-bind-port=18083"
+      - "--daemon-address=monero-node:18081"
+      - "--disable-rpc-login"
+      - "--trusted-daemon"
+      - "--password=prism_monero_2024"
+    depends_on:
+      - monerod
+
+  prism-monero-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.monero-api
+    container_name: prism-monero-api
+    restart: unless-stopped
+    ports:
+      - "18084:18084"
+    environment:
+      - MONERO_WALLET_RPC_URL=http://monero-wallet-rpc:18083/json_rpc
+      - PRISM_MONERO_API_PORT=18084
+    depends_on:
+      - monero-wallet-rpc
