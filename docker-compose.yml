@@ -134,6 +134,7 @@ services:
       - --daemon-address=monero-node:18081
       - --disable-rpc-login
       - --trusted-daemon
+      - --log-level=1
     depends_on:
       - monerod
     deploy:
