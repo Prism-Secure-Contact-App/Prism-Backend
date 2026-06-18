@@ -37,3 +37,4 @@ tools/android/
 *.backup.*
 *.old.root
 
+/.tmp_wallets/

@@ -129,6 +129,7 @@ services:
       - "18083"
     command:
       - --wallet-file=/wallets/prism_wallet
+      - --password=${MONERO_WALLET_PASSWORD:-}
       - --rpc-bind-port=18083
       - --daemon-address=monero-node:18081
       - --disable-rpc-login
@@ -262,8 +263,11 @@ services:
       - prism-net
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./data/website/apk:/usr/share/nginx/html/apk:ro
+      - ./data/certbot/conf:/etc/letsencrypt:ro
+      - ./data/certbot/www:/var/www/certbot:ro
     deploy:
       resources:
         limits:

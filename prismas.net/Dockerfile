@@ -10,6 +10,6 @@ RUN chmod +x /entrypoint.sh
 # Özel nginx konfigürasyonu
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+EXPOSE 80 443
 
 ENTRYPOINT ["/entrypoint.sh"]

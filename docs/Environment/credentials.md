@@ -1,27 +1,47 @@
 # Project Environment Credentials
 
 > [!IMPORTANT]
-> This file contains sensitive information for AI agents to access the project infrastructure.
+> This file contains **non-sensitive** connection metadata for AI agents. All actual secrets (passwords, tokens, API keys) live in `/opt/prism/.env` on the server and are **never** committed to Git.
 
-## Remote Server 1 (Raspberry Pi 4)
-- **IP Address**: `100.125.63.77`
-- **Username**: `fathertkt`
-- **Password**: `1234`
-- **Port**: `22` (SSH)
-- **Roles**: Matrix Synapse, PostgreSQL, WhatsApp/Meta Bridges.
+## PRISM Single Server (Contabo VPS)
 
-## Remote Server 2 (HP Elitebook G8)
-- **IP Address**: `100.77.114.31`
-- **Username**: `fatih`
-- **Password**: `V12_Abd!78`
-- **Port**: `22` (SSH)
-- **Roles**: Monero Full Node (monerod).
+- **IP Address**: `5.189.159.214`
+- **Hostname**: `vmi3380172`
+- **Username**: `root`
+- **Authentication**: SSH public key only (key: `~/.ssh/prism_deploy`)
+- **SSH Port**: `22`
+- **Deployment Directory**: `/opt/prism`
+- **Services**: Matrix Synapse, PostgreSQL, WhatsApp Bridge, Monero Node, LLM API, Retention, Website, Cloudflare Tunnel
 
-## Cloudflare
-- **Tunnel Token**: `eyJhIjoiY2ZkM2YzZTFlN2Y2NTk5MmU2MDIzNzBjMmUyNmE4ZDYiLCJ0IjoiNjBiZDAyNTYtNWQyZC00NTIxLWIwMDctNTIwNWM2YWVhYWM2IiwicyI6IllqQTJORFF4TWpjdE0yVm1aUzAwT0dGakxUaGpPR0l0Tm1Sa01ERXhNbVJoWXpoa00yVm1aR1ZpWVRjdFlXRTJZeTAwWmpCbExXSmlZakF0T1dJME16VTBZVGMwWldZeCJ9`
-- **Zones/Domains**: `matrix.fathertkt.uk`
+## Domains
 
-## Matrix Infrastructure
-- **Base Domain**: `fathertkt.uk`
-- **Synapse Admin User**: [PENDING_USER_INPUT]
-- **Database**: PostgreSQL (Dockerized)
+| Domain | Purpose | Routing |
+| :----- | :------ | :------ |
+| `prismas.net` | Official website + APK download | A record → `5.189.159.214` |
+| `www.prismas.net` | Website alias | A record → `5.189.159.214` |
+| `matrix.fathertkt.uk` | Matrix homeserver | Cloudflare Tunnel |
+
+## Where Secrets Live
+
+| Secret | Location |
+| :----- | :------- |
+| PostgreSQL password | `/opt/prism/.env` |
+| Cloudflare Tunnel token | `/opt/prism/.env` |
+| Synapse admin token | `/opt/prism/.env` |
+| Matrix signing keys | `/opt/prism/data/synapse/` |
+| Monero wallets | `/opt/prism/data/monero-wallets/` |
+
+## SSH Access
+
+```bash
+ssh -i ~/.ssh/prism_deploy root@5.189.159.214
+```
+
+## Maintenance Commands
+
+```bash
+cd /opt/prism
+docker compose ps
+docker compose logs -f <service>
+docker compose up -d --pull always
+```
