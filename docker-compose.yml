@@ -77,9 +77,9 @@ services:
     command: >
       sh -c "
         if [ ! -f /data/config.yaml ]; then
-          python -m mautrix_whatsapp -c /data/config.yaml -g || true;
+          python3 -m mautrix_whatsapp -c /data/config.yaml -g || true;
         fi &&
-        python -m mautrix_whatsapp -c /data/config.yaml
+        python3 -m mautrix_whatsapp -c /data/config.yaml
       "
     deploy:
       resources:
