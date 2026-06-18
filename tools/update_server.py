@@ -1,96 +1,85 @@
-import paramiko
-from scp import SCPClient
-import os
-import tarfile
-import sys
+#!/usr/bin/env python3
+"""
+PRISM Single-Server Update Tool
+
+Pulls the latest Backend code on the Contabo VPS and restarts containers.
+Uses SSH key authentication.
+"""
+
 import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+import os
+import sys
+from pathlib import Path
 
-# Load credentials from docs/Environment/credentials.md or hardcode for now
-HOST = "100.125.63.77"
-USER = "fathertkt"
-PASS = "1234"
-REMOTE_DIR = "prism-backend"
+import paramiko
 
-def progress(filename, size, sent):
-    sys.stdout.write(f"\rUploading {filename}: {float(sent)/float(size)*100:.2f}%")
-    sys.stdout.flush()
+# Force UTF-8 stdout/stderr
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+else:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-def filter_data(tarinfo):
-    # EXCLUDE database and stateful directories to prevent overwriting production data
-    exclude_paths = [
-        f"{REMOTE_DIR}/data/postgres",
-        f"{REMOTE_DIR}/data/synapse/media_store",
-        f"{REMOTE_DIR}/data/synapse/homeserver.db",
-        f"{REMOTE_DIR}/data/whatsapp/logs"
-    ]
-    for path in exclude_paths:
-        if tarinfo.name.startswith(path):
-            print(f"  [Skip] {tarinfo.name}")
-            return None
-    return tarinfo
+HOST = "5.189.159.214"
+USER = "root"
+SSH_KEY = str(Path.home() / ".ssh" / "prism_deploy")
+REMOTE_DIR = "/opt/prism"
+
+
+def ssh_exec(client, cmd, timeout=300):
+    stdin, stdout, stderr = client.exec_command(cmd, timeout=timeout)
+    exit_code = stdout.channel.recv_exit_status()
+    out = stdout.read().decode("utf-8", errors="replace").strip()
+    err = stderr.read().decode("utf-8", errors="replace").strip()
+    return exit_code, out, err
+
 
 def update_server():
+    if not os.path.exists(SSH_KEY):
+        print(f"✗ SSH key not found: {SSH_KEY}")
+        return 1
+
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    
+
     try:
+        pkey = paramiko.Ed25519Key.from_private_key_file(SSH_KEY)
         print(f"Connecting to {HOST}...")
-        client.connect(hostname=HOST, username=USER, password=PASS)
-        
-        # 1. Archive local Backend folder
-        print("Archiving local Backend folder (Excluding databases)...")
-        with tarfile.open("backend_update.tar", "w") as tar:
-            tar.add("Backend", arcname=REMOTE_DIR, filter=filter_data)
-        
-        # 2. Upload to server
-        print("Uploading to server...")
-        with SCPClient(client.get_transport(), progress=progress) as scp:
-            scp.put("backend_update.tar", "backend_update.tar")
-        print("\nUpload complete.")
-        
-        # 3. Extract and Run Setup
-        print("Extracting and running setup on server (requires sudo)...")
-        # We use 'sudo tar' to overwrite files owned by root/docker
-        commands = [
-            f"echo {PASS} | sudo -S tar -xf backend_update.tar",
-            f"cd {REMOTE_DIR} && echo {PASS} | sudo -S sed -i 's/\\r$//' *.sh",
-            f"cd {REMOTE_DIR} && echo {PASS} | sudo -S chmod +x *.sh && echo {PASS} | sudo -S ./setup-prism.sh",
-            f"rm backend_update.tar"
-        ]
-        
-        for cmd in commands:
-            print(f"Executing: {cmd}")
-            stdin, stdout, stderr = client.exec_command(cmd)
-            
-            # Read output and error
-            out = stdout.read().decode('utf-8', errors='replace')
-            err = stderr.read().decode('utf-8', errors='replace')
-            
-            exit_status = stdout.channel.recv_exit_status()
-            if exit_status != 0:
-                print(f"FAILED: {cmd}")
-                print(f"STDERR: {err}")
-                return # Stop if a command fails
-            else:
-                if out: print(out)
-        
-        # 4. Apply changes and start containers
-        print("Starting all containers...")
-        stdin, stdout, stderr = client.exec_command(f"cd {REMOTE_DIR} && echo {PASS} | sudo -S docker compose up -d --remove-orphans")
-        if stdout.channel.recv_exit_status() == 0:
-            print("Containers updated and running.")
-        else:
-            print(f"FAILED to start containers: {stderr.read().decode()}")
-        
-        print("\nUpdate Successful!")
-        
-    except Exception as e:
-        print(f"An error occurred: {e}")
+        client.connect(HOST, username=USER, pkey=pkey, timeout=15)
+        print("✓ SSH Connected\n")
+
+        print("Pulling latest code...")
+        code, out, err = ssh_exec(client, f"cd {REMOTE_DIR} && git pull origin master")
+        print(out)
+        if err:
+            print(err)
+        if code != 0:
+            print("✗ git pull failed")
+            return 1
+
+        print("\nBuilding and restarting containers...")
+        code, out, err = ssh_exec(
+            client,
+            f"cd {REMOTE_DIR} && docker compose up -d --build --remove-orphans",
+            timeout=600,
+        )
+        print(out)
+        if err:
+            print(err)
+        if code != 0:
+            print("✗ docker compose up failed")
+            return 1
+
+        print("\n✓ Update Successful!")
+        return 0
+
+    except Exception as exc:
+        print(f"✗ An error occurred: {exc}")
+        return 1
     finally:
         client.close()
-        if os.path.exists("backend_update.tar"):
-            os.remove("backend_update.tar")
+
 
 if __name__ == "__main__":
-    update_server()
+    sys.exit(update_server())
