@@ -119,18 +119,14 @@ def check_public_website():
 
 def check_monero_wallet_rpc(client):
     cmd = (
-        "docker exec -T monero-wallet-rpc curl -s -X POST http://127.0.0.1:18083/json_rpc "
+        "cd /opt/prism && docker compose exec -T monero-wallet-rpc "
+        "sh -c \"curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:18083/json_rpc "
         "-H 'Content-Type: application/json' "
-        "-d '{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"get_height\"}'"
+        "-d '{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\\\"0\\\",\\\"method\\\":\\\"get_height\\\"}'\""
     )
     code, out, err = ssh_exec(client, cmd)
-    if code == 0 and out.strip().startswith("{"):
-        try:
-            data = json.loads(out)
-            height = data.get("result", {}).get("height", "N/A")
-            return True, f"  ✓ Monero Wallet RPC: height {height}"
-        except Exception:
-            return True, "  ✓ Monero Wallet RPC: responding"
+    if code == 0 and out.strip() == "200":
+        return True, "  ✓ Monero Wallet RPC: responding (HTTP 200)"
     return False, "  ⚠ Monero Wallet RPC: not responding yet (likely waiting for node sync)"
 
 
