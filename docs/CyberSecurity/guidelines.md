@@ -17,6 +17,7 @@
 - Verify all third-party dependencies before installation.
 - Do not push sensitive configuration files to public repositories.
 - Review changes to `docker-compose.yml` and `.env.example` before deployment.
+- Avoid hardcoding homeserver URLs, bridge bot IDs, or service endpoints in UI code; centralize them in `AuthenticationConfig`.
 
 ## 4. Matrix/Synapse Specifics
 - Keep `registration_shared_secret`, `macaroon_secret_key`, and `form_secret` private.
@@ -28,3 +29,14 @@
 - Monero wallets are stored in `/opt/prism/data/monero-wallets/`.
 - Wallet RPC runs without login (`--disable-rpc-login`) inside the private Docker network only.
 - Never expose Monero RPC ports (`18081`, `18083`) to the public internet.
+- The Android app must expose the Monero recovery seed to the user during wallet creation; never hide or discard it.
+
+## 6. Android App Security
+- Store vault (hidden chat) room IDs in `EncryptedSharedPreferences`, not plain `DataStore`.
+- Never commit debug keystores or signing credentials to version control.
+- Keep biometric prompts using `BIOMETRIC_STRONG` or `DEVICE_CREDENTIAL` authenticators.
+- Ensure the Matrix homeserver and bridge bot IDs come from a single configuration source (`AuthenticationConfig`).
+
+## 7. Legacy Infrastructure
+- Old Prism deployments on other machines must be fully decommissioned (containers stopped, images removed, data directories deleted).
+- Verify that no `prism-*` containers, images, or public ports remain on decommissioned hosts.
