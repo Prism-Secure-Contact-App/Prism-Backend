@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir fastapi uvicorn httpx pydantic
+
+COPY prism_monero_api.py .
+
+EXPOSE 18084
+
+CMD ["python", "prism_monero_api.py"]
+
