@@ -74,13 +74,7 @@ services:
       - ./data/whatsapp:/data
     networks:
       - prism-net
-    command: >
-      sh -c "
-        if [ ! -f /data/config.yaml ]; then
-          python3 -m mautrix_whatsapp -c /data/config.yaml -g || true;
-        fi &&
-        python3 -m mautrix_whatsapp -c /data/config.yaml
-      "
+    # Default entrypoint of the image handles config generation and bridge startup.
     deploy:
       resources:
         limits:
