@@ -156,7 +156,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      MONERO_WALLET_RPC_URL: http://monero-wallet-rpc:18083
+      MONERO_WALLET_RPC_URL: http://monero-wallet-rpc:18083/json_rpc
     networks:
       - prism-net
     depends_on:
