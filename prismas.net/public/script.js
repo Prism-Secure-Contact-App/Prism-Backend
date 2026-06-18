@@ -1,6 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     loadAnnouncements();
     loadAppInfo();
+    setupMobileNav();
+    updateCopyrightYear();
 });
 
 async function loadAnnouncements() {
@@ -63,7 +65,37 @@ async function loadAppInfo() {
             const fileInfoEl = document.getElementById('file-info');
             if (fileInfoEl) fileInfoEl.textContent = `${info.size} · Android ${info.androidVersion}+`;
         }
+
+        if (info.apkFilename) {
+            const downloadLink = document.getElementById('download-link');
+            if (downloadLink) downloadLink.href = `/apk/${encodeURIComponent(info.apkFilename)}`;
+        }
     } catch (error) {
         // Varsayılan değerler kalır
+        console.warn('Uygulama bilgileri yüklenemedi:', error);
     }
+}
+
+function setupMobileNav() {
+    const toggle = document.getElementById('nav-toggle');
+    const menu = document.getElementById('nav-menu');
+    if (!toggle || !menu) return;
+
+    toggle.addEventListener('click', () => {
+        const isOpen = menu.classList.toggle('nav-open');
+        toggle.setAttribute('aria-expanded', String(isOpen));
+    });
+
+    // Menü linklerine tıklayınca mobil menüyü kapat
+    menu.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', () => {
+            menu.classList.remove('nav-open');
+            toggle.setAttribute('aria-expanded', 'false');
+        });
+    });
+}
+
+function updateCopyrightYear() {
+    const yearEl = document.getElementById('copyright-year');
+    if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 }
